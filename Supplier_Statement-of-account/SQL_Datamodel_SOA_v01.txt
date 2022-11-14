@@ -1,0 +1,92 @@
+/*
+The data model for payments and invoices data of the suppliers
+*/
+
+-- Payments and Invoices 
+WITH check_invoice
+AS(
+	select 
+		VENDOR_ID VENDORID,
+		PAYMENT_ID,
+		CHECK_DATE,
+		CHECK_NUMBER , 
+		DESCRIPTION, 
+		CURRENCY_CODE,
+		AMOUNT,
+		Null VENDOR_ID,
+		Null INVOICE_ID, 
+		Null INVOICE_DATE  , 
+		Null INVOICE_NUM ,
+		Null DECS_INV,
+		Null INVOICE_CURRENCY_CODE , 
+		Null INVOICE_AMOUNT 	
+	from
+		AP_CHECKS_ALL 
+	Where
+		STATUS_LOOKUP_CODE = 'CLEARED'
+	or
+		STATUS_LOOKUP_CODE = 'NEGOTIABLE'
+
+	union all
+
+	select
+		Null VENDORID,
+		Null PAYMENT_ID,
+		Null CHECK_DATE,
+		Null CHECK_NUMBER , 
+		Null DESCRIPTION, 
+		Null CURRENCY_CODE,
+		Null AMOUNT,
+		VENDOR_ID,
+		INVOICE_ID, 
+		INVOICE_DATE  , 
+		INVOICE_NUM ,
+
+		DESCRIPTION DECS_INV,
+		INVOICE_CURRENCY_CODE , 
+		INVOICE_AMOUNT
+	from 
+		AP_INVOICES_ALL 
+	Where
+		INVOICE_TYPE_LOOKUP_CODE != 'PREPAYMENT'
+	and
+		APPROVAL_STATUS = 'APPROVED'
+	order by 
+		CHECK_DATE desc,
+
+		INVOICE_DATE desc),
+
+-- Supplier information required for the input parameter				
+supplier_info
+AS(
+	select 
+		VENDOR_ID VENDOR_NUM ,
+		VENDOR_NAME,
+		SEGMENT1
+	from 
+		POZ_SUPPLIERS_V)
+		
+-- Final data model with the input parameter
+select 
+	SEGMENT1 "Supplier Number",
+	VENDOR_NAME "Supplier",
+	COALESCE(INVOICE_DATE, CHECK_DATE) "Date",
+	COALESCE(INVOICE_NUM , CAST(CHECK_NUMBER AS varchar(10))) "Transaction Id" ,
+	COALESCE(DECS_INV, DESCRIPTION)  Description,
+	COALESCE(INVOICE_CURRENCY_CODE, CURRENCY_CODE) "Currency",
+	INVOICE_AMOUNT "Credit",	
+	AMOUNT Debt
+from 
+	check_invoice
+
+FULL OUTER JOIN supplier_info
+on
+	check_invoice.VENDOR_ID = supplier_info.VENDOR_NUM
+OR
+	check_invoice.VENDORID= supplier_info.VENDOR_NUM
+where 
+	1=1
+and
+	SEGMENT1 IN (NVL(:Supplier_Number, SEGMENT1 ) )
+order by 
+	"Date"
